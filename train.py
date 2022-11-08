@@ -23,6 +23,7 @@ from utils.data_utils import *
 from utils.distributed_utils import *
 from utils.utils import *
 from utils.metrics import *
+from evaluation import *
 from model.model import *
 
 def get_args():
@@ -91,82 +92,6 @@ def get_scheduler(args, train_dataloader):
     linear_scheduler = lambda step: min(1/warmup*step,1.)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = linear_scheduler)
     return scheduler
-
-# evaluation
-def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
-    # f1, kf1, bleu, rouge, ppl
-    total_loss = 0.
-    model.eval()
-    with torch.no_grad():
-        cnt = 0
-        for data in tqdm(eval_dataloader, desc = 'evaluate', disable =  args.local_rank not in [-1,0]):
-            data['labels'][data['labels']==tokenizer.pad_token_id]=-100 # 굉장히 중요.
-            data = {i:j.cuda() for i,j in data.items() if i!='ids'}
-            loss = model(**data).loss
-            if args.distributed:
-                torch.distributed.reduce(loss, 0)
-                loss = loss / torch.distributed.get_world_size()
-            total_loss+=loss.item()
-    total_loss = total_loss / len(eval_dataloader)
-    # generation        
-    model = model.module if hasattr(model,'module') else model        
-    predict_result = []
-    total_ids = []
-    with torch.no_grad():
-        cnt = 0
-        for data in tqdm(eval_dataloader, desc = 'gen_evaluate', disable =  args.local_rank not in [-1,0]):
-            data = {i:j.cuda() for i,j in data.items() if i not in ['labels','id']}
-            outputs = model.generate(
-                    **data,
-                    pad_token_id = tokenizer.pad_token_id,
-                    decoder_start_token_id=tokenizer.pad_token_id,
-                    bos_token_id=tokenizer.eos_token_id,
-                    eos_token_id = tokenizer.eos_token_id,
-                    early_stopping = True,
-                    do_sample = False,
-                    num_beams = 20,
-					)
-            predicts = tokenizer.batch_decode(outputs, skip_special_tokens = True)
-            actual = tokenizer.batch_decode(data['labels'], skip_special_tokens = True)
-            bs = data['input_ids'].size(0)
-            cnt+=bs
-            predict_result.extend(predicts)
-            
-    total_f1 = []
-    total_kf1 = []
-    total_bleu1 = []
-    total_bleu4 = []
-    total_rouge_l = []
-    
-    for data, predict in zip(eval_data, predict_result):
-        predict = post_process(predict)
-        response = data['answer'].strip()
-        total_f1.append(unigram_f1_score(predict, response, None))
-        bleu = sentence_bleu_score(response, predict, None)
-        total_bleu1.append(bleu[0])
-        total_bleu4.append(bleu[1])
-        total_rouge_l.append(sentence_rouge_l(response, predict, None))
-        knowledge = data['positive_ctxs'][0]['title']+' '+data['positive_ctxs'][0]['context'] # 첫번째 것의 설정.
-        total_kf1.append(unigram_f1_score(predict, knowledge, None))
-    return dict(total_f1 = total_f1, total_kf1 = total_kf1, total_bleu1 = total_bleu1, total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, cnt=cnt), Predict
-
-def merge_scores(scores):
-    if args.distributed:
-        cnt = sum([j.item() for j in get_global(args, torch.tensor([scores['cnt']]).cuda())])
-        f1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_f1'])]).cuda())])/cnt
-        kf1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_kf1'])]).cuda())])/cnt
-        bleu1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_bleu1'])]).cuda())])/cnt
-        bleu4 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_bleu4'])]).cuda())])/cnt
-        rougel = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_rouge_l'])]).cuda())])/cnt
-        
-    else:
-        cnt = scores['cnt']
-        f1 = sum(scores['total_f1'])/cnt
-        kf1 = sum(scores['total_kf1'])/cnt
-        bleu1 = sum(scores['total_bleu1'])/cnt
-        bleu4 = sum(scores['total_bleu4'])/cnt
-        rougel = sum(scores['total_rouge_l'])/cnt
-    return dict(f1=np.round(f1,4), kf1=np.round(kf1,4), bleu1=np.round(bleu1,4), bleu4=np.round(bleu4,4), rougel=np.round(rougel,4), cnt=cnt, loss = np.round(total_loss,4))
 
 def train():
     if args.local_rank in [-1,0]:
