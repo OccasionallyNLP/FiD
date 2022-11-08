@@ -25,6 +25,27 @@ def load_jsonl(path):
         result.append(json.loads(i))
     return result 
 
+def make_index(data):
+    for _,i in enumerate(data):
+        if i.get('id',-1)!=-1:
+            break
+        else:
+            i['id']=_
+    return data       
+
+def load_data(data_path, local_rank, distributed):
+    data = load_data(data_path)
+    data = make_index(data)
+    samples = []
+    if distributed:
+        world_size = torch.distributed.get_world_size()
+        for k,example in enumerate(data):
+            if not k%world_size == local_rank:
+                continue
+            samples.append(example)
+        return samples
+    return data
+    
 # compute hash
 def compute_hash(text):
     return hashlib.md5(text.encode()).hexdigest()
