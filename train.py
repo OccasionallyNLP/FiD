@@ -92,10 +92,6 @@ def get_scheduler(args, train_dataloader):
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = linear_scheduler)
     return scheduler
 
-def post_process(input:str):
-    output = re.sub('<unused_token_0>', '', input).strip()
-    return output
-
 # evaluation
 def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
     # f1, kf1, bleu, rouge, ppl
