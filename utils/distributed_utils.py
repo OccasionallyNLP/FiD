@@ -4,16 +4,6 @@ import torch
 from tqdm import tqdm
 from torch import tensor as T
 
-
-# for distributed
-def make_index(data):
-    for _,i in enumerate(data):
-        if i.get('id',-1)!=-1:
-            break
-        else:
-            i['id']=_
-    return data       
-
 # multi gpu 활용시 loss 모아주기
 def get_global_loss(args,local_loss):
     loss_to_gather = [torch.zeros_like(local_loss) for _ in range(torch.distributed.get_world_size())]
