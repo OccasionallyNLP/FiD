@@ -148,7 +148,8 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
         total_rouge_l.append(sentence_rouge_l(response, predict, None))
         knowledge = data['positive_ctxs'][0]['title']+' '+data['positive_ctxs'][0]['context'] # 첫번째 것의 설정.
         total_kf1.append(unigram_f1_score(predict, knowledge, None))
-    return dict(total_f1 = total_f1, total_kf1 = total_kf1, total_bleu1 = total_bleu1, total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, cnt=cnt), Predict
+    return dict(total_f1 = total_f1, total_kf1 = total_kf1, total_bleu1 = total_bleu1,\
+		total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, cnt=cnt), predict_result
 
 def merge_scores(scores):
     if args.distributed:
