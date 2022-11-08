@@ -13,9 +13,13 @@ from typing import List
 from rouge_metric import PyRouge
 from nltk.translate.bleu_score import sentence_bleu,SmoothingFunction
 
-scores
-# accuracy
-# 개수에 따른 accuracy
+# scores
+# # accuracy
+# # 개수에 따른 accuracy
+
+def post_process(input:str):
+    output = re.sub('<unused_token_0>', '', input).strip()
+    return output
 
 def normalize_answer(s):    
     def tag_clean(t):
