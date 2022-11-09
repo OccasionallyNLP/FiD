@@ -295,12 +295,12 @@ if __name__=='__main__':
     ########################################################################################
     train_data = load_jsonl(args.train_data)#[:8]
     train_data = make_index(train_data) # id 만들어주기
-    train_dataset = FiDDataset(args, train_data, tokenizer, args.is_train)
-    train_sampler = DistributedSampler(train_dataset) if args.distributed else RandomSampler(train_dataset) # XXX
+    train_dataset = FiDDataset(args, train_data, tokenizer, args.is_train, args.shuffle)
+    train_sampler = DistributedSampler(train_dataset) if args.distributed else RandomSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset,batch_size = args.batch_size, sampler = train_sampler, collate_fn = train_dataset._collate_fn)
     
-    val_data = load_data(args.val_data, args.local_rank, args.distributed)#[:8]
-    val_dataset = FiDDataset(args, val_data, tokenizer, args.is_train)
+    val_data = load_data(args.val_data, args.local_rank, args.distributed)
+    val_dataset = FiDDataset(args, val_data, tokenizer, args.is_train, args.shuffle)
     val_sampler = SequentialSampler(val_dataset)
     val_dataloader = DataLoader(val_dataset,batch_size = args.batch_size, sampler = val_sampler, collate_fn = val_dataset._collate_fn)
     ########################################################################################
