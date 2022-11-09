@@ -20,7 +20,7 @@ from utils.data_utils import *
 from utils.distributed_utils import *
 from utils.utils import *
 from utils.metrics import *
-from train_T5 import evaluation, merge_score
+from train_T5 import evaluation, merge_scores
 
 def get_args():
     # parser
@@ -99,11 +99,13 @@ if __name__=='__main__':
     ###########################################################################################################################################
     scores, predict_result = evaluation(args, model, tokenizer, test_data, test_dataloader)
     scores = merge_scores(scores)
+    ppl = np.exp(scores['loss'])
     ###########################################################################################################################################
     with open(os.path.join(args.output_dir, 'result.txt'),'w',encoding='utf-8') as f:
-        f.write(f'ppl - {np.exp(scores['loss'])}')
+        
+        f.write(f'ppl - {ppl}')
         f.write(f'{scores}')
-    print(f'score - {scores} - ppl - {np.exp(scores['loss'])}')
+    print(f'score - {scores} - ppl - {ppl}')
     print(f'processing time - {time.time()-now}')
     
     output = post_process(args, test_data, predict_result)
