@@ -21,7 +21,7 @@ from utils.distributed_utils import *
 from utils.utils import *
 from utils.metrics import *
 from model.model import *
-from train import evaluation, merge_score
+from train_FiD import evaluation, merge_score
 
 def get_args():
     # parser
