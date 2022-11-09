@@ -55,7 +55,7 @@ class FiDDataset(Dataset):
                         idx = candidate_ctxs_ids.index(i)
                         indice.append(idx)
                 candidate_ctxs_ids = [i for i in candidate_ctxs_ids if i not in indice]
-                candidate_ctxs = [i for _,i in enumerate(candidate_ctxs) if _ not in indice]
+                candidate_ctxs = [i for _,i in enumerate(candidate_knowledge) if _ not in indice]
                 candidate_knowledge = [i for i in candidate_ctxs[:max(0,self.args.top_n-len(gold_knowledge))]]
                 total_knowledge = gold_knowledge + candidate_knowledge
                 assert len(total_knowledge)>=self.args.top_n
