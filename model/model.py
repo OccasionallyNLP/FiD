@@ -189,14 +189,16 @@ class FiDBart(transformers.BartForConditionalGeneration):
         self.wrap_encoder() # T5->FiDT5로.         
 
 class EncoderWrapper(torch.nn.Module):
-    def __init__(self, encoder):
+    def __init__(self, encoder,use_checkpoint=False):
         super().__init__()
         # encoder 저장해둠
         self.encoder = encoder
+        
         try:
             self.main_input_name = encoder.main_input_name
         except:
             pass
+        apply_checkpoint_wrapper(self.encoder, use_checkpoint)
     
     def forward(self, input_ids=None, attention_mask=None,**kwargs):
         bsz, total_length = input_ids.shape
