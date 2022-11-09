@@ -127,7 +127,6 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
                     num_beams = 20,
 					)
             predicts = tokenizer.batch_decode(outputs, skip_special_tokens = True)
-            actual = tokenizer.batch_decode(data['labels'], skip_special_tokens = True)
             bs = data['input_ids'].size(0)
             cnt+=bs
             predict_result.extend(predicts)
