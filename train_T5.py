@@ -223,7 +223,7 @@ def train():
         if args.eval_epoch!=0 and epoch%args.eval_epoch==0:
             scores,_= evaluation(args, model, tokenizer, val_data, val_dataloader)
             scores = merge_scores(scores)
-            if args.local_rank == 0:
+            if args.local_rank in [-1,0]:
                 logger1.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
                 logger2.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
                 model_to_save = model.module if hasattr(model,'module') else model
