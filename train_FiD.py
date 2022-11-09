@@ -235,7 +235,7 @@ def train():
                 logger1.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
                 logger2.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
                 model_to_save = model.module if hasattr(model,'module') else model
-                early_stop.check(model_to_save, total_loss)  
+                early_stop.check(model_to_save, scores['loss'])  
                 if early_stop.timetobreak:
                     flag_tensor += 1
             if args.distributed:
