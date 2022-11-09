@@ -61,7 +61,7 @@ class FiDDataset(Dataset):
                 assert len(total_knowledge)>=self.args.top_n
                 # 정답 지식이 항상 첫번째에 있는 것을 모델이 학습하는 것을 방지하기 위함임.
                 if self.shuffle:
-                    total_knowledge = random.shuffle(total_knowledge)
+                    random.shuffle(total_knowledge)
         else:
             candidate_knowledge = [self.title_prefix+i['title']+self.context_prefix+i['context'] if self.args.contain_title else self.context_prefix+i['context'] for i in self.data[index]['retrieved_ctxs']]
             assert len(candidate_knowledge)>=self.args.top_n
