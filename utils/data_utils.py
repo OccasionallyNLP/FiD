@@ -36,9 +36,9 @@ class FiDDataset(Dataset):
         self.shuffle = shuffle # is_train mode 일 때, 첫번째가 항상 정답 지식인 것을 모델이 학습하는 것을 방지하기 위해서 활용함.
         
     def get_feature(self,index):
-        ```
+        '''
         input - knowledge, history, question
-        ```
+        '''
         # question
         question = self.question_prefix+self.data[index]['question']
         if self.is_train:
@@ -144,9 +144,9 @@ class T5Dataset(Dataset):
         self.tokenizer = tokenizer
         
     def get_feature(self,index):
-        ```
+        '''
         input - knowledge, history, question
-        ```
+        '''
         # question
         question = self.question_prefix+self.data[index]['question']
         
