@@ -17,9 +17,14 @@ from nltk.translate.bleu_score import sentence_bleu,SmoothingFunction
 # # accuracy
 # # 개수에 따른 accuracy
 
-def post_process(input:str):
-    output = re.sub('<unused_token_0>', '', input).strip()
-    return output
+def post_process(input_string:str):
+    SPAN_TOKEN = '<extra_id_%s>'
+    UNUSED_TOKEN = 'UNUSED'
+    for i in range(100):
+        input_string = re.sub(SPAN_TOKEN%i, '', input_string).strip()
+    for i in range(5000):
+        input_string = re.sub(UNUSED_TOKEN+str(i).zfill(4), '', input_string).strip()
+    return input_string
 
 def normalize_answer(s):    
     def tag_clean(t):
