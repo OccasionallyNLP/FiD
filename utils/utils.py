@@ -34,7 +34,7 @@ def make_index(data):
     return data       
 
 def load_data(data_path, local_rank, distributed):
-    data = load_data(data_path)
+    data = load_jsonl(data_path)
     data = make_index(data)
     samples = []
     if distributed:
