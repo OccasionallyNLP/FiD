@@ -100,8 +100,6 @@ def get_log(args):
     file_handler = logging.FileHandler(os.path.join(args.output_dir,'train_%s.txt'%(args.test_name)), encoding='utf-8')
     file_handler.setFormatter(formatter)
     logger1.addHandler(file_handler)
-    file_handler2 = logging.FileHandler(os.path.join(args.output_dir,'train_val_%s.txt'%(args.test_name)), encoding='utf-8')
-    file_handler2.setFormatter(formatter)
     return logger1, logger2
 
 # early stop
