@@ -111,7 +111,7 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
     with torch.no_grad():
         cnt = 0
         for data in tqdm(eval_dataloader, desc = 'gen_evaluate', disable =  args.local_rank not in [-1,0]):
-            data = {i:j.cuda() for i,j in data.items() if i not in ['labels','id']}
+            data = {i:j.cuda() for i,j in data.items() if i not in ['labels','ids']}
             outputs = model.generate(
                     **data,
                     pad_token_id = tokenizer.pad_token_id,
