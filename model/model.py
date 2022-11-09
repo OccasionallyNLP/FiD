@@ -65,7 +65,7 @@ class FiDT5(transformers.T5ForConditionalGeneration):
         """
         Wrap T5 encoder to obtain a Fusion-in-Decoder model.
         """
-        self.encoder = EncoderWrapper(self.encoder, use_checkpoint=use_checkpoint)
+        self.encoder = EncoderWrapper(self.encoder)
     
     # t5 weight를 불러오기 위해서 필요한, T5처럼 만드는 부분
     def unwrap_encoder(self):
