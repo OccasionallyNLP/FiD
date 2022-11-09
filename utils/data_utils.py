@@ -37,7 +37,7 @@ class FiDDataset(Dataset):
         
     def get_feature(self,index):
         ```
-        input - history, question, knowledge
+        input - knowledge, history, question
         ```
         # question
         question = self.question_prefix+self.data[index]['question']
@@ -65,7 +65,7 @@ class FiDDataset(Dataset):
         else:
             candidate_knowledge = [self.title_prefix+i['title']+self.context_prefix+i['context'] if self.args.contain_title else self.context_prefix+i['context'] for i in self.data[index]['retrieved_ctxs']]
             assert len(candidate_knowledge)>=self.args.top_n
-            tmp = candidate_knowledge[:self.args.top_n]
+            total_knowledge = candidate_knowledge[:self.args.top_n]
             
         # history 
         if self.args.include_history:
@@ -121,6 +121,85 @@ class FiDDataset(Dataset):
         encoder_inputs = self.tokenizer(encoder_inputs, padding='longest',return_tensors = 'pt')
         input_ids, attention_mask = encoder_inputs.input_ids.reshape(bs,self.args.top_n,-1), encoder_inputs.attention_mask.reshape(bs,self.args.top_n,-1)
         return dict(input_ids = input_ids, attention_mask = attention_mask, labels = labels, ids=T(indice))
+    
+    def __getitem__(self, index):
+        return self.get_feature(index)
+    
+    def __len__(self):
+        return len(self.data)
+
+class T5Dataset(Dataset):
+    # speaker
+    apperentice_prefix = 'UNUSED0002'
+    wizard_prefix = 'UNUSED0003'
+    # history
+    history_prefix = 'UNUSED0004'
+    # question
+    question_prefix = 'UNUSED0005'
+    
+    def __init__(self, args, data:List[dict], tokenizer):
+        super().__init__()
+        self.data = data
+        self.args = args
+        self.tokenizer = tokenizer
+        
+    def get_feature(self,index):
+        ```
+        input - knowledge, history, question
+        ```
+        # question
+        question = self.question_prefix+self.data[index]['question']
+        
+        # history 
+        if self.args.include_history:
+            history = []
+            for i in self.data[index]['history']:
+                if i['speaker'] == 'agent':
+                    if self.args.just_user:
+                        continue
+                    history.append(self.wizard_prefix+i['utterance'])
+                else:
+                    history.append(self.apperentice_prefix+i['utterance'])
+            checked_history = self.check_history(history, self.args.history_turn)
+            checked_history = self.history_prefix+''.join(checked_history)
+        # history가 없다면
+        else:
+            checked_history = ''
+        
+        total = checked_history+question
+        
+        # answer
+        answer = self.data[index]['answer']
+        
+        # id
+        # for distributed
+        if self.data[index].get('id',-1)!=-1:
+            ids = T(self.data[index]['id'])
+        else:
+            ids = None
+        #return output
+        return ids, total, answer
+        
+    def check_history(self, history, how_many=None):
+        checked_history = history
+        checked_history.reverse()
+        if how_many is not None:
+            assert how_many>=1
+            checked_history = checked_history[:how_many]
+        checked_history.reverse()
+        return checked_history
+    
+    def _collate_fn(self, batch):
+        encoder_inputs = []
+        labels = []
+        indice = []
+        for (ids,total,answer) in batch:
+            encoder_inputs.append(total)
+            labels.append(answer)
+            indice.append(ids)
+        labels = self.tokenizer(labels,padding='longest',return_tensors = 'pt').input_ids
+        encoder_inputs = self.tokenizer(encoder_inputs, padding='longest',return_tensors = 'pt')
+        return dict(input_ids = encoder_inputs.input_ids, attention_mask = encoder_inputs.attention_mask, labels = labels, ids=T(indice))
     
     def __getitem__(self, index):
         return self.get_feature(index)
