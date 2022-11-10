@@ -144,7 +144,7 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
     return dict(total_f1 = total_f1, total_kf1 = total_kf1, total_bleu1 = total_bleu1,\
 		total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, cnt=cnt), predict_result
 
-def merge_scores(scores):
+def merge_scores(args, scores):
     if args.distributed:
         cnt = sum([j.item() for j in get_global(args, torch.tensor([scores['cnt']]).cuda())])
         f1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_f1'])]).cuda())])/cnt
@@ -222,7 +222,7 @@ def train():
         ###################################################################################################
         if args.eval_epoch!=0 and epoch%args.eval_epoch==0:
             scores,_= evaluation(args, model, tokenizer, val_data, val_dataloader)
-            scores = merge_scores(scores)
+            scores = merge_scores(args, scores)
             if args.local_rank in [-1,0]:
                 logger1.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
                 logger2.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
