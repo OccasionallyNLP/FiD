@@ -56,8 +56,9 @@ def get_args():
 
 def post_process(args, data, predict):
     output = []
-    for i in zip(data, predict):
+    for i,p in zip(data, predict):
         output_i = dict(answer = i['answer'], question = i['question'], dialog_no = i['dialog_no'])
+        output_i['predict']=p
         output_i['history']=['['+j['speaker']+']'+j['utterance'] for j in i['history']]
         if args.history_turn:
             output_i['history']=output_i['history'][:args.history_turn]
