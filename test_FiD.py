@@ -22,6 +22,7 @@ from utils.utils import *
 from utils.metrics import *
 from model.model import *
 from train_FiD import evaluation, merge_scores
+import pandas as pd
 
 def get_args():
     # parser
