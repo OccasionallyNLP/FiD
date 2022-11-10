@@ -114,7 +114,7 @@ if __name__=='__main__':
     # evaluation
     ###########################################################################################################################################
     scores, predict_result = evaluation(args, model, tokenizer, test_data, test_dataloader)
-    scores = merge_scores(scores)
+    scores = merge_scores(args,scores)
     ppl = np.exp(scores['loss'])
     ###########################################################################################################################################
     
