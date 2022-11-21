@@ -85,7 +85,7 @@ def make_optimizer_group(args, model):
     }]
     return optimizer_grouped_parameters
 
-def get_scheduler(args, train_dataloader):
+def get_scheduler(args, optimizer, train_dataloader):
     total_step = len(train_dataloader)*args.epochs
     warmup = total_step * args.warmup
     linear_scheduler = lambda step: min(1/warmup*step,1.)
@@ -118,6 +118,7 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
             data = {i:j.cuda() for i,j in data.items() if i not in ['labels','ids']}
             outputs = model.generate(
                     **data,
+		    max_length = args.answer_max_length 
                     pad_token_id = tokenizer.pad_token_id,
                     decoder_start_token_id=tokenizer.pad_token_id,
                     bos_token_id=tokenizer.eos_token_id,
