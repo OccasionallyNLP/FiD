@@ -1,3 +1,4 @@
+# train T5
 # train
 # -*- coding: utf-8 -*-
 import os
@@ -41,9 +42,10 @@ def get_args():
     parser.add_argument('--eval_epoch', type = int, default = 1, help = 'term of evaluation')
     parser.add_argument('--batch_size', default = 8, type=int)
     parser.add_argument('--lr', type=float, default = 5e-5)
-    parser.add_argument('--warmup', type=float, default = 0.05)
+    parser.add_argument('--warmup', type=float, default = 1000)
     parser.add_argument('--decay', type=float, default = 0.05)
     parser.add_argument('--fp16', type=str2bool, default = False)
+    parser.add_argument('--accumulation_step', type=int, default = 1) # 221124 추가
     # PTM model
     parser.add_argument('--ptm_path', type=str)
     # model
@@ -83,7 +85,7 @@ def make_optimizer_group(args, model):
 
 def get_scheduler(args, optimizer, train_dataloader):
     total_step = len(train_dataloader)*args.epochs
-    warmup = total_step * args.warmup
+    warmup = args.warmup
     linear_scheduler = lambda step: min(1/warmup*step,1.)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = linear_scheduler)
     return scheduler
@@ -114,7 +116,7 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
             data = {i:j.cuda() for i,j in data.items() if i not in ['labels','ids']}
             outputs = model.generate(
                     **data,
-		    max_length = args.answer_max_length,
+                    max_length = args.answer_max_length,
                     pad_token_id = tokenizer.pad_token_id,
                     decoder_start_token_id=tokenizer.pad_token_id,
                     bos_token_id=tokenizer.eos_token_id,
@@ -122,7 +124,7 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
                     early_stopping = True,
                     do_sample = False,
                     num_beams = 20,
-					)
+    )
             predicts = tokenizer.batch_decode(outputs, skip_special_tokens = True)
             bs = data['input_ids'].size(0)
             cnt+=bs
@@ -133,6 +135,8 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
     total_bleu1 = []
     total_bleu4 = []
     total_rouge_l = []
+    total_dist_1 = []
+    total_dist_2 = []
     
     for data, predict in zip(eval_data, predict_result):
         predict = post_process(predict)
@@ -141,11 +145,16 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
         bleu = sentence_bleu_score(response, predict, None)
         total_bleu1.append(bleu[0])
         total_bleu4.append(bleu[1])
+        total_dist_1.append(distinct_n_sentence_level(predict, 1, None))
+        total_dist_2.append(distinct_n_sentence_level(predict, 2, None))
+        knowledge = data['positive_ctxs'][0]['title']+' '+data['positive_ctxs'][0]['context'] # 첫번째 것의 설정.
+        total_kf1.append(unigram_f1_score(predict, knowledge, None))
         total_rouge_l.append(sentence_rouge_l(response, predict, None))
-    return dict(total_f1 = total_f1, total_kf1 = total_kf1, total_bleu1 = total_bleu1,\
-		total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, cnt=cnt), predict_result
+        return dict(total_f1 = total_f1, total_kf1 = total_kf1, total_bleu1 = total_bleu1,\
+		total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, total_dist_1 = total_dist_1,\
+                total_dist_2 = total_dist_2, cnt=cnt), predict_result
 
-def merge_scores(args, scores):
+def merge_scores(args,scores):
     if args.distributed:
         cnt = sum([j.item() for j in get_global(args, torch.tensor([scores['cnt']]).cuda())])
         f1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_f1'])]).cuda())])/cnt
@@ -153,7 +162,8 @@ def merge_scores(args, scores):
         bleu1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_bleu1'])]).cuda())])/cnt
         bleu4 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_bleu4'])]).cuda())])/cnt
         rougel = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_rouge_l'])]).cuda())])/cnt
-        
+        dist_1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_dist_1'])]).cuda())])/cnt
+        dist_2 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_dist_2'])]).cuda())])/cnt
     else:
         cnt = scores['cnt']
         f1 = sum(scores['total_f1'])/cnt
@@ -161,9 +171,9 @@ def merge_scores(args, scores):
         bleu1 = sum(scores['total_bleu1'])/cnt
         bleu4 = sum(scores['total_bleu4'])/cnt
         rougel = sum(scores['total_rouge_l'])/cnt
-    return dict(f1=np.round(f1,4), kf1=np.round(kf1,4), bleu1=np.round(bleu1,4), bleu4=np.round(bleu4,4), rougel=np.round(rougel,4), cnt=cnt, loss = np.round(scores['total_loss'],4))
-
-
+        dist_1 = sum(scores['total_dist_1'])/cnt
+        dist_2 = sum(scores['total_dist_2'])/cnt
+    return dict(f1=np.round(f1,4), kf1=np.round(kf1,4), bleu1=np.round(bleu1,4), bleu4=np.round(bleu4,4), rougel=np.round(rougel,4), cnt=cnt, loss = np.round(scores['total_loss'],4), dist_1 = np.round(dist_1,4), dist_2 = np.round(dist_2,4))
 
 def train():
     if args.local_rank in [-1,0]:
@@ -180,35 +190,40 @@ def train():
             train_sampler.set_epoch(epoch)
         model.train()
         Loss = 0.
-        c = 0
+        step = 0
         iter_bar = tqdm(train_dataloader, desc='step', disable=args.local_rank not in [-1,0])
         #train
         for data in iter_bar:
             optimizer.zero_grad()
             data['labels'][data['labels']==tokenizer.pad_token_id]=-100 # 굉장히 중요.
             data = {i:j.cuda() for i,j in data.items() if i!='ids'}
-
             if args.fp16:
                 with autocast():
                     loss = model.forward(**data).loss
+                    loss = loss / args.accumulation_step
                     scaler.scale(loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
-                    scaler.step(optimizer)
-                    scaler.update()
+                    if (step+1)%args.accumulation_step==0:
+                        scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
+                        scaler.step(optimizer)
+                        scaler.update()
+                        optimizer.zero_grad()
 
             else:
-                loss = model.forward(**data).loss # relevance_dist : bs, top_n
+                loss = model.forward(**data).loss 
+                loss = loss / args.accumulation_step
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
-                optimizer.step()
-            c+=1
+                if (step+1)%args.accumulation_step==0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
+                    optimizer.step()
+                    optimizer.zero_grad()
+            step+=1
             scheduler.step()
             if args.distributed:
                 torch.distributed.reduce(loss, 0)
                 loss = loss / torch.distributed.get_world_size()
             Loss+=loss.item()
-            iter_bar.set_postfix({'epoch':epoch, 'global_step':global_step, 'lr':f"{scheduler.get_last_lr()[0]:.5f}",'total_loss':f'{Loss/c:.5f}'}) # 감소한다는 것을 확인하는 것임.
+            iter_bar.set_postfix({'epoch':epoch, 'global_step':global_step, 'lr':f"{scheduler.get_last_lr()[0]:.5f}",'total_loss':f'{Loss/step:.5f}'}) # 감소한다는 것을 확인하는 것임.
             if global_step%args.logging_term == 0:
                 if args.local_rank in [-1,0]:
                     logger1.info(iter_bar)
@@ -224,6 +239,7 @@ def train():
         if args.eval_epoch!=0 and epoch%args.eval_epoch==0:
             scores,_= evaluation(args, model, tokenizer, val_data, val_dataloader)
             scores = merge_scores(args, scores)
+            
             if args.local_rank in [-1,0]:
                 logger1.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
                 logger2.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
@@ -288,7 +304,7 @@ if __name__=='__main__':
     train_dataset = T5Dataset(args, train_data, tokenizer)
     train_sampler = DistributedSampler(train_dataset) if args.distributed else RandomSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset,batch_size = args.batch_size, sampler = train_sampler, collate_fn = train_dataset._collate_fn)
-    
+    # 개수가 안맞는다.
     val_data = load_data(args.val_data, args.local_rank, args.distributed)
     val_dataset = T5Dataset(args, val_data, tokenizer)
     val_sampler = SequentialSampler(val_dataset)
