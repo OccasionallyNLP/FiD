@@ -332,3 +332,86 @@ class T5Dataset(Dataset):
     
     def __len__(self):
         return len(self.data)
+
+# TokenTypeT5   
+class TokenTypeT5Dataset(Dataset):
+    # speaker
+    apperentice_prefix = 'UNUSED0002'
+    wizard_prefix = 'UNUSED0003'
+    # history
+    history_prefix = 'UNUSED0004'
+    # question
+    question_prefix = 'UNUSED0005'
+    
+    def __init__(self, args, data:List[dict], tokenizer):
+        super().__init__()
+        self.data = data
+        self.args = args
+        self.tokenizer = tokenizer
+        self.apprentice_id = self.tokenizer.convert_tokens_to_ids(self.apprentice_prefix)
+        self.wizard_id = self.tokenizer.convert_tokens_to_ids(self.wizard_prefix)
+    
+    def get_feature(self,index):
+        '''
+        input - knowledge, history, question
+        '''
+        token_type_id = []
+        input_id = []
+        
+        # history 
+        if self.args.include_history:
+            history = self.data[index]['history']
+            if self.args.history_turn is not None:
+                history = history[-self.args.history_turn:]
+            for i in history:
+                history_id_i = self.tokenizer(i['utterance'],add_special_tokens=False).input_ids
+                input_id.extend(history_id_i)
+                if i['speaker'] == 'agent':
+                    token_type_id.extend([self.wizard_id]*len(history_id_i))
+                else:
+                    token_type_id.extend([self.apperentice_id]*len(history_id_i))
+        
+        # question - user
+        question = self.data[index]['question']
+        question_id = self.tokenizer(question).input_ids # eos
+        input_id.extend(question_id)
+        attention_mask = [1]*len(input_id)
+        token_type_id.extend([self.apperentice_id]*len(question_id))
+        # answer
+        answer = self.data[index]['answer']
+        label = self.tokenizer(answer).input_ids
+        return input_id, attention_mask, token_type_id, label
+
+    def _collate_fn(self, batch):
+        input_ids = []
+        attention_masks = []
+        token_type_ids = []
+        labels = []
+        for (input_id, attention_mask, token_type_id, label) in batch:
+            input_ids.append(input_id)
+            attention_masks.append(attention_mask)
+            token_type_ids.append(token_type_ids)
+            labels.append(label)
+        max_length = max(list(map(input_ids, len)))
+        max_length_labels = max(list(map(labels, len)))
+        
+        # padding
+        ## input_ids
+        for i in input_ids: # bs
+            i = i+[self.tokenizer_pad_token_id]*max(max_length-len(i),0)
+        # attention masks
+        for i in attention_masks: # bs
+            i = i+[0]*max(max_length-len(i),0)
+        # token_type_ids
+        for i in token_type_ids: # bs
+            i = i+[self.apprentice_id]*max(max_length-len(i),0)
+        # labels
+        for i in labels: # bs
+            i = i+[self.tokenizer_pad_token_id]*max(max_length-len(i),0)
+        return dict(input_ids = T(input_ids), attention_mask = T(attention_masks), token_type_ids = T(token_type_ids), labels = T(labels))
+    
+    def __getitem__(self, index):
+        return self.get_feature(index)
+    
+    def __len__(self):
+        return len(self.data)
