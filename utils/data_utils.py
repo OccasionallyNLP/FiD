@@ -348,7 +348,7 @@ class TokenTypeT5Dataset(Dataset):
         self.data = data
         self.args = args
         self.tokenizer = tokenizer
-        self.apprentice_id = self.tokenizer.convert_tokens_to_ids(self.apprentice_prefix)
+        self.apperentice_id = self.tokenizer.convert_tokens_to_ids(self.apperentice_prefix)
         self.wizard_id = self.tokenizer.convert_tokens_to_ids(self.wizard_prefix)
     
     def get_feature(self,index):
