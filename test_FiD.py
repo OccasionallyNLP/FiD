@@ -1,3 +1,4 @@
+# test FiD
 # -*- coding: utf-8 -*-
 import os
 import json
@@ -32,13 +33,14 @@ def get_args():
     parser.add_argument('--test_data', type=str, help = 'test_data 위치')
     parser.add_argument('--output_dir', type=str, help = 'output 위치')
     
-    
     # PTM model
     parser.add_argument('--ptm_path', type=str)
     # model
-    parser.add_argument('--top_n', type=int, default = 5, help = 'top n의 개수')
+    
     parser.add_argument('--contain_title', type=str2bool, default=True)
+    parser.add_argument('--top_n', type=int, default = 5, help = 'top n의 개수')
     parser.add_argument('--answer_max_length', type=int)
+    
     # specific
     parser.add_argument('--is_train', type=str2bool, default = False ,help = 'mode')
     parser.add_argument('--shuffle', type=str2bool, default = False ,help = 'mode')
@@ -57,23 +59,25 @@ def get_args():
 
 def post_process(args, data, predict):
     output = []
-    for i,p in zip(data, predict):
+    for i,j in zip(data, predict):
         output_i = dict(answer = i['answer'], question = i['question'], dialog_no = i['dialog_no'])
-        output_i['predict']=p
-        output_i['history']=['['+j['speaker']+']'+j['utterance'] for j in i['history']]
+        output_i['history']=['['+h['speaker']+']'+h['utterance'] for h in i['history']]
+        output_i['predict']=j
         if args.history_turn:
             output_i['history']=output_i['history'][:args.history_turn]
+        output_i['history_turn']=len(output_i['history'])
         output_i['history']=' '.join(output_i['history'])
         if args.is_train:
-            positive_ctxs=['['+j['title']+']'+j['context'] for j in i['positive_ctxs'][:args.top_n]] 
+            positive_ctxs=['['+k['title']+']'+k['context'] for k in i['positive_ctxs'][:args.top_n]] 
             for _,j in enumerate(positive_ctxs):
                 output_i['positive_ctxs_%d'%(_+1)]=j
             output_i['include_gtk']=True
         else:
-            retrieved_ctxs=['['+j['title']+']'+j['context'] for j in i['retrieved_ctxs'][:args.top_n]]
+            retrieved_ctxs=['['+k['title']+']'+k['context'] for k in i['retrieved_ctxs'][:args.top_n]]
             for _,j in enumerate(retrieved_ctxs):
                 output_i['retrieved_ctxs_%d'%(_+1)]=j
             output_i['include_gtk']=(i['positive_ctxs_ids'][0] in i['retrieved_ctxs_ids'][:args.top_n])
+        
         output.append(output_i)
     output = pd.DataFrame(output)
     return output
@@ -116,16 +120,15 @@ if __name__=='__main__':
     # evaluation
     ###########################################################################################################################################
     scores, predict_result = evaluation(args, model, tokenizer, test_data, test_dataloader)
-    scores = merge_scores(args,scores)
-    ppl = np.exp(scores['loss'])
+    scores = merge_scores(args, scores)
     ###########################################################################################################################################
-    
-    with open(os.path.join(args.output_dir, 'result.txt'),'w',encoding='utf-8') as f:
+    with open(os.path.join(args.output_dir, 'result.txt'), 'w',encoding='utf-8') as f:
+        ppl = np.exp(scores['loss'])
         f.write(f'ppl - {ppl}')
         f.write(f'{scores}')
     print(f'score - {scores} - ppl - {ppl}')
     print(f'processing time - {time.time()-now}')
     
     output = post_process(args, test_data, predict_result)
-    output.to_csv(os.path.join(args.output_dir, 'predicted.csv'), encoding='cp949')
+    #output.to_csv(os.path.join(args.output_dir, 'predicted.csv'), encoding='cp949')
     output.to_csv(os.path.join(args.output_dir, 'my_predicted.csv'), encoding='utf-8')    
