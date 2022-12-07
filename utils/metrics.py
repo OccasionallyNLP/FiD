@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from typing import List
 from rouge_metric import PyRouge
 from nltk.translate.bleu_score import sentence_bleu,SmoothingFunction
+from nltk.util import ngrams
 
 # scores
 # # accuracy
@@ -181,3 +182,23 @@ def compute_MRR_K(answers:List[int], candidates:List[List[int]],K:int)->float:
     #print(reciprocal)
     #print(hit)    
     return np.sum(reciprocal)/N
+
+# dist_n
+def distinct_n_sentence_level(sentence, n, tokenizer=None):
+    """
+    Compute distinct-N for a single sentence.
+    :param sentence: a list of words.
+    :param n: int, ngram.
+    :return: float, the metric value.
+    """
+    if tokenizer is None:
+        tokens = sentence.split()
+    else:
+        tokens = tokenizer.tokenize(sentence)
+    if len(tokens) == 0:
+        return 0.0  # Prevent a zero division
+    n_grams = list(ngrams(tokens, n))
+    distinct_ngrams = set(n_grams)
+    if len(n_grams)==0:
+        return 0.0
+    return len(distinct_ngrams) / len(n_grams)
