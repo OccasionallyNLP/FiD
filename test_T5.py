@@ -1,3 +1,4 @@
+# test T5
 # -*- coding: utf-8 -*-
 import os
 import json
@@ -21,7 +22,6 @@ from utils.distributed_utils import *
 from utils.utils import *
 from utils.metrics import *
 from train_T5 import evaluation, merge_scores
-import pandas as pd
 
 def get_args():
     # parser
@@ -51,9 +51,8 @@ def get_args():
 
 def post_process(args, data, predict):
     output = []
-    for i,p in zip(data, predict):
+    for i in zip(data, predict):
         output_i = dict(answer = i['answer'], question = i['question'], dialog_no = i['dialog_no'])
-        output_i['predict']=p
         output_i['history']=['['+j['speaker']+']'+j['utterance'] for j in i['history']]
         if args.history_turn:
             output_i['history']=output_i['history'][:args.history_turn]
@@ -71,7 +70,7 @@ if __name__=='__main__':
     ###########################################################################################
     tokenizer = T5Tokenizer.from_pretrained(args.ptm_path, extra_ids=0)
     config = T5Config.from_pretrained(args.ptm_path)
-    model = T5(config)
+    model = T5ForConditionalGeneration(config)
     model.load_state_dict(torch.load(args.model_path))
     
     # TODO
@@ -101,15 +100,13 @@ if __name__=='__main__':
     ###########################################################################################################################################
     scores, predict_result = evaluation(args, model, tokenizer, test_data, test_dataloader)
     scores = merge_scores(args,scores)
-    ppl = np.exp(scores['loss'])
-    ###########################################################################################################################################
-    with open(os.path.join(args.output_dir, 'result.txt'),'w',encoding='utf-8') as f:
-        
+    with open(os.path.join(args.output_dir, 'result.txt'), 'w',encoding='utf-8') as f:
+        ppl = np.exp(scores['loss'])
         f.write(f'ppl - {ppl}')
         f.write(f'{scores}')
     print(f'score - {scores} - ppl - {ppl}')
     print(f'processing time - {time.time()-now}')
     
     output = post_process(args, test_data, predict_result)
-    output.to_csv(os.path.join(args.output_dir, 'predicted.csv'), encoding='cp949')
+    #output.to_csv(os.path.join(args.output_dir, 'predicted.csv'), encoding='cp949')
     output.to_csv(os.path.join(args.output_dir, 'my_predicted.csv'), encoding='utf-8')    
