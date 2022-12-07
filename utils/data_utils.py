@@ -398,16 +398,16 @@ class TokenTypeT5Dataset(Dataset):
         # padding
         ## input_ids
         for i in input_ids: # bs
-            i = i+[self.tokenizer.pad_token_id]*max(max_length-len(i),0)
+            i.extend([self.tokenizer.pad_token_id]*max(max_length-len(i),0))
         # attention masks
         for i in attention_masks: # bs
-            i = i+[0]*max(max_length-len(i),0)
+            i.extend(i+[0]*max(max_length-len(i),0)))
         # token_type_ids
         for i in token_type_ids: # bs
-            i = i+[self.apprentice_id]*max(max_length-len(i),0)
+            i.extend([self.apprentice_id]*max(max_length-len(i),0))
         # labels
         for i in labels: # bs
-            i = i+[self.tokenizer.pad_token_id]*max(max_length-len(i),0)
+            i.extend([self.tokenizer.pad_token_id]*max(max_length-len(i),0))
         return dict(input_ids = T(input_ids), attention_mask = T(attention_masks), token_type_ids = T(token_type_ids), labels = T(labels))
     
     def __getitem__(self, index):
