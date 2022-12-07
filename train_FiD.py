@@ -1,3 +1,4 @@
+# train FiD
 # train
 # -*- coding: utf-8 -*-
 import os
@@ -41,9 +42,10 @@ def get_args():
     parser.add_argument('--eval_epoch', type = int, default = 1, help = 'term of evaluation')
     parser.add_argument('--batch_size', default = 8, type=int)
     parser.add_argument('--lr', type=float, default = 5e-5)
-    parser.add_argument('--warmup', type=float, default = 0.05)
+    parser.add_argument('--warmup', type=int, default = 1000)
     parser.add_argument('--decay', type=float, default = 0.05)
     parser.add_argument('--fp16', type=str2bool, default = False)
+    parser.add_argument('--accumulation_step', type=int, default = 1)
     # PTM model
     parser.add_argument('--ptm_path', type=str)
     # model
@@ -51,9 +53,9 @@ def get_args():
     parser.add_argument('--contain_title', type=str2bool, default=True)
     parser.add_argument('--answer_max_length', type=int)
     # specific
-    parser.add_argument('--is_train', type=str2bool, default = False ,help = 'mode')
-    parser.add_argument('--shuffle', type=str2bool, default = False ,help = 'mode')
-    parser.add_argument('--include_history', type=str2bool, help = 'include history')
+    parser.add_argument('--is_train', type=str2bool, default = False ,help = 'mode') # Decision
+    parser.add_argument('--shuffle', type=str2bool, default = False ,help = 'mode') # Decision
+    parser.add_argument('--include_history', type=str2bool, help = 'include history') 
     parser.add_argument('--just_user', type=str2bool, help = 'include history')
     parser.add_argument('--history_turn', type=int, help = 'how many turn do you want to include in history')
 
@@ -87,7 +89,7 @@ def make_optimizer_group(args, model):
 
 def get_scheduler(args, optimizer, train_dataloader):
     total_step = len(train_dataloader)*args.epochs
-    warmup = total_step * args.warmup
+    warmup = args.warmup
     linear_scheduler = lambda step: min(1/warmup*step,1.)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = linear_scheduler)
     return scheduler
@@ -115,10 +117,11 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
     with torch.no_grad():
         cnt = 0
         for data in tqdm(eval_dataloader, desc = 'gen_evaluate', disable =  args.local_rank not in [-1,0]):
+            
             data = {i:j.cuda() for i,j in data.items() if i not in ['labels','ids']}
             outputs = model.generate(
                     **data,
-		    max_length = args.answer_max_length 
+                    max_length = args.answer_max_length,
                     pad_token_id = tokenizer.pad_token_id,
                     decoder_start_token_id=tokenizer.pad_token_id,
                     bos_token_id=tokenizer.eos_token_id,
@@ -137,6 +140,8 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
     total_bleu1 = []
     total_bleu4 = []
     total_rouge_l = []
+    total_dist_1 = []
+    total_dist_2 = []
     
     for data, predict in zip(eval_data, predict_result):
         predict = post_process(predict)
@@ -146,12 +151,16 @@ def evaluation(args, model, tokenizer, eval_data, eval_dataloader):
         total_bleu1.append(bleu[0])
         total_bleu4.append(bleu[1])
         total_rouge_l.append(sentence_rouge_l(response, predict, None))
+        total_dist_1.append(distinct_n_sentence_level(predict, 1, None))
+        total_dist_2.append(distinct_n_sentence_level(predict, 2, None))
         knowledge = data['positive_ctxs'][0]['title']+' '+data['positive_ctxs'][0]['context'] # 첫번째 것의 설정.
         total_kf1.append(unigram_f1_score(predict, knowledge, None))
+        
     return dict(total_f1 = total_f1, total_kf1 = total_kf1, total_bleu1 = total_bleu1,\
-		total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, cnt=cnt), predict_result
+		total_bleu4 = total_bleu4, total_rouge_l = total_rouge_l, total_loss = total_loss, total_dist_1 = total_dist_1,\
+                total_dist_2 = total_dist_2, cnt=cnt), predict_result
 
-def merge_scores(args, scores):
+def merge_scores(args,scores):
     if args.distributed:
         cnt = sum([j.item() for j in get_global(args, torch.tensor([scores['cnt']]).cuda())])
         f1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_f1'])]).cuda())])/cnt
@@ -159,7 +168,8 @@ def merge_scores(args, scores):
         bleu1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_bleu1'])]).cuda())])/cnt
         bleu4 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_bleu4'])]).cuda())])/cnt
         rougel = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_rouge_l'])]).cuda())])/cnt
-        
+        dist_1 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_dist_1'])]).cuda())])/cnt
+        dist_2 = sum([j.item() for j in get_global(args, torch.tensor([sum(scores['total_dist_2'])]).cuda())])/cnt
     else:
         cnt = scores['cnt']
         f1 = sum(scores['total_f1'])/cnt
@@ -167,9 +177,9 @@ def merge_scores(args, scores):
         bleu1 = sum(scores['total_bleu1'])/cnt
         bleu4 = sum(scores['total_bleu4'])/cnt
         rougel = sum(scores['total_rouge_l'])/cnt
-    return dict(f1=np.round(f1,4), kf1=np.round(kf1,4), bleu1=np.round(bleu1,4), bleu4=np.round(bleu4,4), rougel=np.round(rougel,4), cnt=cnt, loss = np.round(scores['total_loss'],4))
-
-
+        dist_1 = sum(scores['total_dist_1'])/cnt
+        dist_2 = sum(scores['total_dist_2'])/cnt
+    return dict(f1=np.round(f1,4), kf1=np.round(kf1,4), bleu1=np.round(bleu1,4), bleu4=np.round(bleu4,4), rougel=np.round(rougel,4), cnt=cnt, loss = np.round(scores['total_loss'],4), dist_1 = np.round(dist_1,4), dist_2 = np.round(dist_2,4))
 
 def train():
     if args.local_rank in [-1,0]:
@@ -309,7 +319,7 @@ if __name__=='__main__':
     ########################################################################################
     optimizer_grouped_parameters = make_optimizer_group(args, model)
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, args.lr, weight_decay = args.decay)
-    scheduler = get_scheduler(args, train_dataloader)
+    scheduler = get_scheduler(args, optimizer, train_dataloader)
     ########################################################################################
     # train
     ########################################################################################
