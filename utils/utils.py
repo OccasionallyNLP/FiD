@@ -35,15 +35,17 @@ def make_index(data):
 
 def load_data(data_path, local_rank, distributed):
     data = load_jsonl(data_path)
-    data = make_index(data)
     samples = []
     if distributed:
         world_size = torch.distributed.get_world_size()
+        data = data[:len(data)//world_size*world_size]
+        data = make_index(data)
         for k,example in enumerate(data):
             if not k%world_size == local_rank:
                 continue
             samples.append(example)
         return samples
+    data = make_index(data)
     return data
     
 # compute hash
