@@ -310,6 +310,7 @@ if __name__=='__main__':
     train_dataloader = DataLoader(train_dataset,batch_size = args.batch_size, sampler = train_sampler, collate_fn = train_dataset._collate_fn)
     
     val_data = load_data(args.val_data, args.local_rank, args.distributed)
+    val_data = distributed_load_data(val_data, args.local_rank, args.distributed, True)
     val_dataset = FiDDataset(args, val_data, tokenizer, args.is_train, args.shuffle)
     val_sampler = SequentialSampler(val_dataset)
     val_dataloader = DataLoader(val_dataset,batch_size = args.batch_size, sampler = val_sampler, collate_fn = val_dataset._collate_fn)
