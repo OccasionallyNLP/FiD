@@ -2,6 +2,7 @@
 # distributed utils
 import torch
 from tqdm import tqdm
+import math
 from torch import tensor as T
 
 # multi gpu 활용시 loss 모아주기
@@ -15,6 +16,26 @@ def get_global_loss(args,local_loss):
         else:
             global_loss.append(local_loss)
     return global_loss
+
+# 2023.01.01 추가
+def distributed_load_data(data, local_rank, distributed,drop_last = True):
+    samples = []
+    if distributed:
+        world_size = torch.distributed.get_world_size()
+        if drop_last:
+            data = data[:len(data)//world_size*world_size] # drop last 효과
+        else:
+            num_samples = math.ceil(len(data)/world_size)
+            total_size = num_samples*world_size
+            padding_size = total_size - num_samples
+            if padding_size <= len(data):
+                data += data[:padding_size]
+            else:
+                data += (data*math.ceil(padding_size/len(data)))[:padding_size] 
+        num_samples = math.ceil(len(data)/world_size)
+        samples = data[local_rank:local_rank+num_samples]
+        return samples
+    return data
 
 # excec embedding distributed
 def exec_embedding_distributed(args,passage_encoder, context_dataloader):
