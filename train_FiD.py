@@ -39,10 +39,10 @@ def get_args():
     
     # 학습 관련
     parser.add_argument('--epochs', default = 10, type=int)
-    parser.add_argument('--eval_epoch', type = int, default = 1, help = 'term of evaluation')
+    parser.add_argument('--eval_epoch', type = float, default = 1.0, help = 'term of evaluation')
     parser.add_argument('--batch_size', default = 8, type=int)
     parser.add_argument('--lr', type=float, default = 5e-5)
-    parser.add_argument('--warmup', type=int, default = 1000)
+    parser.add_argument('--warmup', type=float, default = 100)
     parser.add_argument('--decay', type=float, default = 0.05)
     parser.add_argument('--fp16', type=str2bool, default = False)
     parser.add_argument('--accumulation_step', type=int, default = 1)
@@ -53,7 +53,7 @@ def get_args():
     parser.add_argument('--contain_title', type=str2bool, default=True)
     parser.add_argument('--answer_max_length', type=int)
     # specific
-    parser.add_argument('--is_train', type=str2bool, default = False ,help = 'mode') # Decision
+    parser.add_argument('--is_traikn', type=str2bool, default = False ,help = 'mode') # Decision
     parser.add_argument('--shuffle', type=str2bool, default = False ,help = 'mode') # Decision
     parser.add_argument('--include_history', type=str2bool, help = 'include history') 
     parser.add_argument('--just_user', type=str2bool, help = 'include history')
@@ -89,7 +89,10 @@ def make_optimizer_group(args, model):
 
 def get_scheduler(args, optimizer, train_dataloader):
     total_step = len(train_dataloader)*args.epochs
-    warmup = args.warmup
+    if int(args.warmup)==0:
+	warmup = total_step * args.warmup
+    else:
+	warmup = args.warmup
     linear_scheduler = lambda step: min(1/warmup*step,1.)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = linear_scheduler)
     return scheduler
@@ -238,20 +241,31 @@ def train():
             logger2.info(iter_bar)
         # evaluation
         ###################################################################################################
-        if args.eval_epoch!=0 and epoch%args.eval_epoch==0:
-            
-            scores,_= evaluation(args, model, tokenizer, val_data, val_dataloader)
-            scores = merge_scores(args, scores)
-            if args.local_rank in [-1,0]:
-                logger1.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
-                logger2.info(f'Val ---- epoch : {epoch} ----- scores:{scores}')
-                model_to_save = model.module if hasattr(model,'module') else model
-                early_stop.check(model_to_save, scores['loss'])  
-                if early_stop.timetobreak:
-                    flag_tensor += 1
-            if args.distributed:
-                torch.distributed.broadcast(flag_tensor, 0) 
-                torch.distributed.barrier()
+        if args.eval_epoch!=0:
+			if int(args.eval_epoch)==0:
+				if c%(len(train_dataloader)*args.eval_epoch)==0:
+					time_to_eval = True
+				else:
+					time_to_eval = False
+			else:
+				if epoch%args.eval_epoch==0:
+					time_to_eval = True
+				else:
+					time_to_eval = False
+			if time_to_eval:
+				scores,_= evaluation(args, model, tokenizer, val_data, val_dataloader)
+            	scores = merge_scores(args, scores)
+            	if args.local_rank in [-1,0]:
+                	logger1.info(f'Val ---- global step : {global_step} ----- scores:{scores}')
+                	logger2.info(f'Val ---- global step : {global_step} ----- scores:{scores}')
+                	model_to_save = model.module if hasattr(model,'module') else model
+                	early_stop.check(model_to_save, scores['loss'])  
+                	if early_stop.timetobreak:
+                    	flag_tensor += 1
+            	if args.distributed:
+                	torch.distributed.broadcast(flag_tensor, 0) 
+                	torch.distributed.barrier()
+		    
         ###################################################################################################
         if args.early_stop:    
             if flag_tensor:
