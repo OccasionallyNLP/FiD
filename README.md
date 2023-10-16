@@ -1,5 +1,5 @@
 # Fusion in Decoder
-본 코드는 원래 Fusion in Decoder code를 T5 version으로 바꾼 code 입니다.
+본 코드는 원래 Fusion in Decoder code를 T5 version으로 바꾼 code 입니다.  
 원 코드 : https://github.com/facebookresearch/FiD
 
 # Reference
